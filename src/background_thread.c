@@ -538,8 +538,13 @@ background_thread_create_locked(tsd_t *tsd, unsigned arena_ind) {
 
 	bool need_new_thread;
 	malloc_mutex_lock(tsd_tsdn(tsd), &info->mtx);
+	/*
+	 * The last check is there to leave Thread 0 creation entirely
+	 * to the initializing thread (arena 0).
+	 */
 	need_new_thread = background_thread_enabled() &&
-	    (info->state == background_thread_stopped);
+	    (info->state == background_thread_stopped) &&
+	    (thread_ind != 0 || arena_ind == 0);
 	if (need_new_thread) {
 		background_thread_init(tsd, info);
 	}
@@ -547,11 +552,8 @@ background_thread_create_locked(tsd_t *tsd, unsigned arena_ind) {
 	if (!need_new_thread) {
 		return false;
 	}
-	if (thread_ind != 0) {
-		/*
-		 * Non-zero thread slots are created asynchronously by Thread 0.
-		 * Only thread 0 is created directly (by whoever needs it first).
-		 */
+	if (arena_ind != 0) {
+		/* Threads are created asynchronously by Thread 0. */
 		background_thread_info_t *t0 = &background_thread_info[0];
 		malloc_mutex_lock(tsd_tsdn(tsd), &t0->mtx);
 		assert(t0->state == background_thread_started);
